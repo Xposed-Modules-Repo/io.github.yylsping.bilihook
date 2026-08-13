@@ -37,14 +37,18 @@
 .\gradlew.bat clean assembleRelease
 ```
 
-APK 输出到 `app/build/outputs/apk/release/`。本地 `release` 任务使用 Android 调试签名；正式发布时应使用独立、妥善保管的发布密钥重新签名。
+维护者本地的正式构建使用本项目专属发布密钥：
+
+- 密钥：`signing-private/release.p12`
+- 凭据：`signing-private/signing.properties`
+
+这两个文件均已被 `.gitignore` 排除，不会提交到 GitHub。存在本地签名配置时，`assembleRelease` 会直接生成正式签名 APK；没有私钥的仓库克隆仍可使用 `assembleDebug` 生成测试包。
+
+发布密钥决定 Android 能否覆盖升级。请加密备份整个 `signing-private/` 目录，切勿删除、重新生成或提交其中内容。由于本项目此前的 APK 使用测试签名，首次切换到该发布密钥时需要先卸载旧版；此后的正式版本可以直接覆盖升级。
 
 ## 相关项目
 
 - [BiliPartFix](https://github.com/yylsping/bili-part-fix)：同样面向哔哩哔哩 7.4.0，负责旧客户端的分 P 播放、动态评论、图文评论、EVA3/Opus 专栏和小站图文等兼容性修复。
-- [酷安净化](https://github.com/yylsping/coolapk-purifier)：面向酷安的去广告模块。
-- [X AdFree](https://github.com/yylsping/x-adfree)：面向 X Android 客户端的去广告模块。
-
 `bili hook` 与 `BiliPartFix` 可以分别安装：前者侧重画质解锁与去广告，后者侧重旧版客户端兼容修复。两者均严格限定哔哩哔哩 7.4.0。
 
 ## 许可证
