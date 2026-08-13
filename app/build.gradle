@@ -1,0 +1,42 @@
+plugins { id "com.android.application" }
+
+android {
+    namespace "io.github.bilihook"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "io.github.bilihook"
+        minSdk 26
+        targetSdk 36
+        versionCode 10
+        versionName "1.5.0"
+    }
+
+    buildTypes {
+        debug { minifyEnabled false }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach { output ->
+            outputFileName = "bili hook_1.5.0.apk"
+        }
+    }
+
+    packaging {
+        resources {
+            merges += "META-INF/xposed/*"
+        }
+    }
+}
+
+dependencies { compileOnly "io.github.libxposed:api:102.0.0" }

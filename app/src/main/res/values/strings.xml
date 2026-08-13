@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">bili hook</string>
+    <string name="module_description">登录后解锁画质；去普通开屏和三类内容广告，保留生日开屏。</string>
+</resources>
