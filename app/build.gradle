@@ -9,15 +9,15 @@ if (signingPropertiesFile.isFile()) {
 }
 
 android {
-    namespace "io.github.bilihook"
+    namespace "io.github.yylsping.bilihook"
     compileSdk 36
 
     defaultConfig {
-        applicationId "io.github.bilihook"
+        applicationId "io.github.yylsping.bilihook"
         minSdk 26
         targetSdk 36
-        versionCode 10
-        versionName "1.5.0"
+        versionCode 11
+        versionName "1.5.1"
     }
 
     signingConfigs {
@@ -48,7 +48,7 @@ android {
 
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            outputFileName = "bili hook_1.5.0.apk"
+            outputFileName = "bili hook_1.5.1.apk"
         }
     }
 

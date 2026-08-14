@@ -1,4 +1,4 @@
-package io.github.bilihook;
+package io.github.yylsping.bilihook;
 
 import android.util.Log;
 

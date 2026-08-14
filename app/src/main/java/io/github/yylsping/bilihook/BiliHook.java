@@ -1,4 +1,4 @@
-package io.github.bilihook;
+package io.github.yylsping.bilihook;
 
 import android.app.Application;
 import android.content.Context;
@@ -194,7 +194,7 @@ public final class BiliHook extends XposedModule {
             return false;
         }
         try {
-            Reflect.findAndHookMethod(vipClass, "isEffectiveVip", new Object[]{new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.2
+            Reflect.findAndHookMethod(vipClass, "isEffectiveVip", new Object[]{new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.2
                 protected void afterHookedMethod(HookRuntime.HookParam param) {
                     if (BiliHook.isLoggedIn()) {
                         BiliHook.REAL_VIP_OBSERVED.set(true);
@@ -238,7 +238,7 @@ public final class BiliHook extends XposedModule {
             return false;
         }
         try {
-            Reflect.findAndHookMethod(builderClass, "setExtraString", new Object[]{String.class, String.class, new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.3
+            Reflect.findAndHookMethod(builderClass, "setExtraString", new Object[]{String.class, String.class, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.3
                 protected void beforeHookedMethod(HookRuntime.HookParam param) {
                     if (!"extra_title".equals(param.args[0]) || !(param.args[1] instanceof String) || !BiliHook.REAL_VIP_OBSERVED.get() || BiliHook.REAL_VIP_EFFECTIVE.get()) {
                         return;
@@ -282,7 +282,7 @@ public final class BiliHook extends XposedModule {
         }
     }
 
-    /* JADX INFO: renamed from: io.github.bilihook.BiliHook$4, reason: invalid class name */
+    /* JADX INFO: renamed from: io.github.yylsping.bilihook.BiliHook$4, reason: invalid class name */
     static class AnonymousClass4 extends HookRuntime.Callback {
         final /* synthetic */ Method val$getType;
         final /* synthetic */ Method val$hasCm;
@@ -303,8 +303,8 @@ public final class BiliHook extends XposedModule {
             final Method method = this.val$getType;
             final Method method2 = this.val$hasCm;
             final Method method3 = this.val$hasCmStock;
-            List<Object> filtered = BiliHook.filterList(source, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$4$$ExternalSyntheticLambda0
-                @Override // io.github.bilihook.BiliHook.ItemPredicate
+            List<Object> filtered = BiliHook.filterList(source, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$4$$ExternalSyntheticLambda0
+                @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
                 public final boolean test(Object obj) {
                     return BiliHook.isRelatedAd(obj, method, method2, method3);
                 }
@@ -355,7 +355,7 @@ public final class BiliHook extends XposedModule {
         }
     }
 
-    /* JADX INFO: renamed from: io.github.bilihook.BiliHook$5, reason: invalid class name */
+    /* JADX INFO: renamed from: io.github.yylsping.bilihook.BiliHook$5, reason: invalid class name */
     static class AnonymousClass5 extends HookRuntime.Callback {
         final /* synthetic */ Method val$hasCm;
 
@@ -369,8 +369,8 @@ public final class BiliHook extends XposedModule {
                 return;
             }
             final Method method = this.val$hasCm;
-            List<Object> filtered = BiliHook.filterList((List) result, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$5$$ExternalSyntheticLambda0
-                @Override // io.github.bilihook.BiliHook.ItemPredicate
+            List<Object> filtered = BiliHook.filterList((List) result, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$5$$ExternalSyntheticLambda0
+                @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
                 public final boolean test(Object obj) {
                     return BiliHook.isLegacyRelatedAd(obj, method);
                 }
@@ -398,7 +398,7 @@ public final class BiliHook extends XposedModule {
         Class<?> modelClass = Reflect.findClassIfExists(LEGACY_VIDEO_MODEL, classLoader);
         try {
             Class<?> parserClass = Reflect.findClass(LEGACY_VIDEO_MOSS_PARSER, classLoader);
-            Reflect.findAndHookMethod(parserClass, "b", new Object[]{new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.6
+            Reflect.findAndHookMethod(parserClass, "b", new Object[]{new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.6
                 protected void afterHookedMethod(HookRuntime.HookParam param) {
                     BiliHook.clearLegacyVideoAds(param.getResult());
                 }
@@ -418,7 +418,7 @@ public final class BiliHook extends XposedModule {
              */
             try {
                 Class<?> callbackClass = Reflect.findClass(LEGACY_AD_SEGMENT_CALLBACK, classLoader);
-                Reflect.findAndHookMethod(callbackClass, "c", new Object[]{modelClass, new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.7
+                Reflect.findAndHookMethod(callbackClass, "c", new Object[]{modelClass, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.7
                     protected void beforeHookedMethod(HookRuntime.HookParam param) {
                         BiliHook.clearLegacyVideoAds(param.args[0]);
                     }
@@ -439,7 +439,7 @@ public final class BiliHook extends XposedModule {
         }
     }
 
-    /* JADX INFO: renamed from: io.github.bilihook.BiliHook$8, reason: invalid class name */
+    /* JADX INFO: renamed from: io.github.yylsping.bilihook.BiliHook$8, reason: invalid class name */
     static class AnonymousClass8 extends HookRuntime.Callback {
         final /* synthetic */ Method val$hasCm;
 
@@ -453,8 +453,8 @@ public final class BiliHook extends XposedModule {
                 return;
             }
             final Method method = this.val$hasCm;
-            List<Object> filtered = BiliHook.filterList((List) source, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$8$$ExternalSyntheticLambda0
-                @Override // io.github.bilihook.BiliHook.ItemPredicate
+            List<Object> filtered = BiliHook.filterList((List) source, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$8$$ExternalSyntheticLambda0
+                @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
                 public final boolean test(Object obj) {
                     return BiliHook.isLegacyRelatedAd(obj, method);
                 }
@@ -574,7 +574,7 @@ public final class BiliHook extends XposedModule {
             for (Method method : parserClass.getDeclaredMethods()) {
                 Class<?>[] parameters = method.getParameterTypes();
                 if (parameters.length == 1 && parameters[0] == jsonArrayClass && List.class.isAssignableFrom(method.getReturnType())) {
-                    HookRuntime.hook(method, new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.11
+                    HookRuntime.hook(method, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.11
                         protected void beforeHookedMethod(HookRuntime.HookParam param) {
                             Object filtered = BiliHook.filterPegasusJsonInput(param.args[0], jsonArrayClass);
                             if (filtered != null) {
@@ -601,7 +601,7 @@ public final class BiliHook extends XposedModule {
         }
     }
 
-    /* JADX INFO: renamed from: io.github.bilihook.BiliHook$12, reason: invalid class name */
+    /* JADX INFO: renamed from: io.github.yylsping.bilihook.BiliHook$12, reason: invalid class name */
     static class AnonymousClass12 extends HookRuntime.Callback {
         AnonymousClass12() {
         }
@@ -609,8 +609,8 @@ public final class BiliHook extends XposedModule {
         protected void beforeHookedMethod(HookRuntime.HookParam param) {
             List<Object> filtered;
             Object source = param.args[0];
-            if ((source instanceof List) && (filtered = BiliHook.filterList((List) source, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$12$$ExternalSyntheticLambda0
-                @Override // io.github.bilihook.BiliHook.ItemPredicate
+            if ((source instanceof List) && (filtered = BiliHook.filterList((List) source, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$12$$ExternalSyntheticLambda0
+                @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
                 public final boolean test(Object obj) {
                     return BiliHook.isPegasusRawBrpcAd(obj);
                 }
@@ -627,8 +627,8 @@ public final class BiliHook extends XposedModule {
     /* JADX INFO: Access modifiers changed from: private */
     public static Object filterPegasusJsonInput(Object source, Class<?> jsonArrayClass) {
         List<Object> filtered;
-        if (!(source instanceof List) || (filtered = filterList((List) source, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$$ExternalSyntheticLambda0
-            @Override // io.github.bilihook.BiliHook.ItemPredicate
+        if (!(source instanceof List) || (filtered = filterList((List) source, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$$ExternalSyntheticLambda0
+            @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
             public final boolean test(Object obj) {
                 return BiliHook.isPegasusRawJsonAd(obj);
             }
@@ -696,8 +696,8 @@ public final class BiliHook extends XposedModule {
     public static void filterPegasusResult(HookRuntime.HookParam param) {
         List<Object> filtered;
         Object result = param.getResult();
-        if ((result instanceof List) && (filtered = filterList((List) result, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$$ExternalSyntheticLambda1
-            @Override // io.github.bilihook.BiliHook.ItemPredicate
+        if ((result instanceof List) && (filtered = filterList((List) result, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$$ExternalSyntheticLambda1
+            @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
             public final boolean test(Object obj) {
                 return BiliHook.lambda$filterPegasusResult$0(obj);
             }
@@ -916,7 +916,7 @@ public final class BiliHook extends XposedModule {
         try {
             Class<?> resolverClass = Reflect.findClass(UGC_RESOLVER, classLoader);
             Class<?> resolveParamsClass = Reflect.findClass(RESOLVE_PARAMS, classLoader);
-            Reflect.findAndHookMethod(resolverClass, "resolveMediaResource", new Object[]{Context.class, resolveParamsClass, new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.21
+            Reflect.findAndHookMethod(resolverClass, "resolveMediaResource", new Object[]{Context.class, resolveParamsClass, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.21
                 protected void beforeHookedMethod(HookRuntime.HookParam param) {
                     int quality = BiliHook.desiredPremiumQuality.get();
                     if (quality < BiliHook.PREMIUM_QUALITY_MIN || !BiliHook.isLoggedIn()) {
@@ -932,7 +932,7 @@ public final class BiliHook extends XposedModule {
             for (Method method : resolverClass.getDeclaredMethods()) {
                 Class<?>[] parameters = method.getParameterTypes();
                 if ("f".equals(method.getName()) && parameters.length == 13 && parameters[0] == Long.TYPE && parameters[1] == Long.TYPE && parameters[2] == Long.TYPE) {
-                    HookRuntime.hook(method, new HookRuntime.Callback() { // from class: io.github.bilihook.BiliHook.22
+                    HookRuntime.hook(method, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.22
                         protected void beforeHookedMethod(HookRuntime.HookParam param) {
                             int quality = BiliHook.desiredPremiumQuality.get();
                             if (quality >= BiliHook.PREMIUM_QUALITY_MIN && BiliHook.isLoggedIn()) {
@@ -961,7 +961,7 @@ public final class BiliHook extends XposedModule {
         }
     }
 
-    /* JADX INFO: renamed from: io.github.bilihook.BiliHook$23, reason: invalid class name */
+    /* JADX INFO: renamed from: io.github.yylsping.bilihook.BiliHook$23, reason: invalid class name */
     static class AnonymousClass23 extends HookRuntime.Callback {
         final /* synthetic */ Method val$getCardItemCase;
 
@@ -975,8 +975,8 @@ public final class BiliHook extends XposedModule {
                 return;
             }
             final Method method = this.val$getCardItemCase;
-            List<Object> filtered = BiliHook.filterList((List) sourceArg, new ItemPredicate() { // from class: io.github.bilihook.BiliHook$23$$ExternalSyntheticLambda0
-                @Override // io.github.bilihook.BiliHook.ItemPredicate
+            List<Object> filtered = BiliHook.filterList((List) sourceArg, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$23$$ExternalSyntheticLambda0
+                @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
                 public final boolean test(Object obj) {
                     return BiliHook.isSearchAd(obj, method);
                 }
