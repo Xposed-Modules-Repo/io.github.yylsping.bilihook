@@ -29,6 +29,7 @@ dist/
 
 # Internal validation notes
 /VALIDATION*.md
+/XPOSED_UPDATE.md
 
 # OS files
 .DS_Store
