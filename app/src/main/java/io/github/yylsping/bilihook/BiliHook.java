@@ -3,12 +3,16 @@ package io.github.yylsping.bilihook;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.os.Build;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -28,6 +32,7 @@ public final class BiliHook extends XposedModule {
     private static final String PEGASUS_AD_ITEM = "com.bilibili.pegasus.api.modelv2.AdItem";
     private static final String PEGASUS_BASE_PARSER = "com.bilibili.pegasus.api.BaseTMApiParser";
     private static final String PEGASUS_BRPC_CONVERTER = "com.bilibili.pegasus.utils.BrpcRespConverterKt";
+    private static final String PEGASUS_CARD_OR_BUILDER = "com.bapis.bilibili.app.card.v1.CardOrBuilder";
     private static final String PLAYER_QUALITY_SERVICE = "com.bilibili.playerbizcommon.features.quality.PlayerQualityService";
     private static final int PREMIUM_QUALITY_MIN = 112;
     private static final String PROTOBUF_ANY = "com.google.protobuf.Any";
@@ -36,9 +41,9 @@ public final class BiliHook extends XposedModule {
     private static final String RELATES_FEED_REPLY = "com.bapis.bilibili.app.viewunite.v1.RelatesFeedReply";
     private static final String RELATE_CARD = "com.bapis.bilibili.app.viewunite.common.RelateCard";
     private static final String RESOLVE_PARAMS = "com.bilibili.lib.media.resolver2.IResolveParams";
-    private static final String SEARCH_CONVERTER = "com.bilibili.search2.utils.BrpcSearchResultConverterKt";
+    private static final String SEARCH_CONVERTER = "com.bilibili.search.utils.BrpcSearchResultConverterKt";
     private static final String SEARCH_ITEM = "com.bapis.bilibili.polymer.app.search.v1.Item";
-    private static final String SEARCH_RESULT_ALL = "com.bilibili.search2.api.SearchResultAll";
+    private static final String SEARCH_RESULT_ALL = "com.bilibili.search.api.SearchResultAll";
     private static final String TAG = "bili hook";
     private static final String TARGET_PACKAGE = "tv.danmaku.bili";
     private static final String TARGET_VERSION_NAME = "7.4.0";
@@ -47,14 +52,18 @@ public final class BiliHook extends XposedModule {
     private static final String VIEW_CM = "com.bapis.bilibili.app.viewunite.v1.CM";
     private static final String VIP_EXTRA = "com.bilibili.lib.accountinfo.model.VipExtraUserInfo";
     private static final String VIP_USER = "com.bilibili.lib.accountinfo.model.VipUserInfo";
+    private static final long LOGIN_STATE_CACHE_TTL_MS = 750L;
+    private static final Object[] NO_ARGS = new Object[0];
     private static volatile Context accountsContext;
     private static volatile Method accountsGetMethod;
     private static volatile Object accountsInstance;
     private static volatile Method accountsIsLoginMethod;
+    private static volatile boolean cachedLoginState;
+    private static volatile long cachedLoginStateAt;
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
     private static final AtomicBoolean ATTACH_HOOKED = new AtomicBoolean(false);
-    private static final AtomicBoolean REAL_VIP_OBSERVED = new AtomicBoolean(false);
-    private static final AtomicBoolean REAL_VIP_EFFECTIVE = new AtomicBoolean(false);
+    private static volatile boolean realVipObserved;
+    private static volatile boolean realVipEffective;
     private static final AtomicInteger desiredPremiumQuality = new AtomicInteger(0);
     private static final ThreadLocal<Boolean> rejectedPremiumPrepare = new ThreadLocal<>();
 
@@ -85,7 +94,7 @@ public final class BiliHook extends XposedModule {
             HookRuntime.hook(attach, new HookRuntime.Callback() {
                 @Override
                 protected void afterHookedMethod(HookRuntime.HookParam hookParam) {
-                    Context context = (Context) hookParam.args[0];
+                    Context context = (Context) hookParam.getArg(0);
                     if (context == null || !isSupportedTarget(context)
                             || !INSTALLED.compareAndSet(false, true)) {
                         return;
@@ -101,7 +110,9 @@ public final class BiliHook extends XposedModule {
     private static boolean isSupportedTarget(Context context) {
         try {
             PackageInfo info = context.getPackageManager().getPackageInfo(TARGET_PACKAGE, 0);
-            long versionCode = info.getLongVersionCode();
+            long versionCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? info.getLongVersionCode()
+                    : info.versionCode;
             if (TARGET_VERSION_CODE == versionCode
                     && TARGET_VERSION_NAME.equals(info.versionName)) {
                 return true;
@@ -197,8 +208,8 @@ public final class BiliHook extends XposedModule {
             Reflect.findAndHookMethod(vipClass, "isEffectiveVip", new Object[]{new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.2
                 protected void afterHookedMethod(HookRuntime.HookParam param) {
                     if (BiliHook.isLoggedIn()) {
-                        BiliHook.REAL_VIP_OBSERVED.set(true);
-                        BiliHook.REAL_VIP_EFFECTIVE.set(Boolean.TRUE.equals(param.getResult()));
+                        BiliHook.realVipObserved = true;
+                        BiliHook.realVipEffective = Boolean.TRUE.equals(param.getResult());
                         param.setResult(true);
                     }
                 }
@@ -211,6 +222,12 @@ public final class BiliHook extends XposedModule {
 
     /* JADX INFO: Access modifiers changed from: private */
     public static boolean isLoggedIn() {
+        long now = SystemClock.elapsedRealtime();
+        long checkedAt = cachedLoginStateAt;
+        long cacheAge = now - checkedAt;
+        if (checkedAt != 0L && cacheAge >= 0L && cacheAge < LOGIN_STATE_CACHE_TTL_MS) {
+            return cachedLoginState;
+        }
         try {
             Object accounts = accountsInstance;
             if (accounts == null) {
@@ -225,8 +242,11 @@ public final class BiliHook extends XposedModule {
             if (getMethod2 == null) {
                 return false;
             }
-            Object result = getMethod2.invoke(accounts, new Object[0]);
-            return (result instanceof Boolean) && ((Boolean) result).booleanValue();
+            Object result = getMethod2.invoke(accounts, NO_ARGS);
+            boolean loggedIn = result instanceof Boolean && (Boolean) result;
+            cachedLoginState = loggedIn;
+            cachedLoginStateAt = now;
+            return loggedIn;
         } catch (Throwable th) {
             return false;
         }
@@ -240,12 +260,13 @@ public final class BiliHook extends XposedModule {
         try {
             Reflect.findAndHookMethod(builderClass, "setExtraString", new Object[]{String.class, String.class, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.3
                 protected void beforeHookedMethod(HookRuntime.HookParam param) {
-                    if (!"extra_title".equals(param.args[0]) || !(param.args[1] instanceof String) || !BiliHook.REAL_VIP_OBSERVED.get() || BiliHook.REAL_VIP_EFFECTIVE.get()) {
+                    if (!"extra_title".equals(param.getArg(0)) || !(param.getArg(1) instanceof String)
+                            || !BiliHook.realVipObserved || BiliHook.realVipEffective) {
                         return;
                     }
-                    String message = (String) param.args[1];
+                    String message = (String) param.getArg(1);
                     if (message.contains("成功切换至4K") || message.contains("成功切换至1080P 高码率")) {
-                        param.args[1] = "服务端未返回所选会员画质，已保持当前实际画质";
+                        param.setArg(1, "服务端未返回所选会员画质，已保持当前实际画质");
                     }
                 }
             }});
@@ -261,7 +282,7 @@ public final class BiliHook extends XposedModule {
             return false;
         }
         try {
-            Reflect.findAndHookMethod(splashClass, "isValid", new Object[]{HookRuntime.returnConstant(false)});
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(splashClass, "isValid"), false);
             return true;
         } catch (Throwable th) {
             return false;
@@ -321,11 +342,11 @@ public final class BiliHook extends XposedModule {
             return false;
         }
         try {
-            Object type = getType.invoke(item, new Object[0]);
+            Object type = getType.invoke(item, NO_ARGS);
             if ((type instanceof Enum) && "CM".equals(((Enum) type).name())) {
                 return true;
             }
-            return Boolean.TRUE.equals(hasCm.invoke(item, new Object[0])) || Boolean.TRUE.equals(hasCmStock.invoke(item, new Object[0]));
+            return Boolean.TRUE.equals(hasCm.invoke(item, NO_ARGS)) || Boolean.TRUE.equals(hasCmStock.invoke(item, NO_ARGS));
         } catch (Throwable th) {
             return false;
         }
@@ -344,11 +365,11 @@ public final class BiliHook extends XposedModule {
             Reflect.findAndHookMethod(viewReplyClass, "getRelatesList", new Object[]{relateFilter});
             int count2 = 0 + 1;
             Reflect.findAndHookMethod(feedReplyClass, "getListList", new Object[]{relateFilter});
-            Reflect.findAndHookMethod(viewReplyClass, "getCmsList", new Object[]{HookRuntime.returnConstant(Collections.emptyList())});
-            Reflect.findAndHookMethod(viewReplyClass, "getCmsCount", new Object[]{HookRuntime.returnConstant(0)});
-            Reflect.findAndHookMethod(viewReplyClass, "hasCmUnderPlayer", new Object[]{HookRuntime.returnConstant(false)});
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(viewReplyClass, "getCmsList"), Collections.emptyList());
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(viewReplyClass, "getCmsCount"), 0);
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(viewReplyClass, "hasCmUnderPlayer"), false);
             count = count2 + 1 + 1 + 1 + 1;
-            Reflect.findAndHookMethod(viewReplyClass, "getCmUnderPlayer", new Object[]{HookRuntime.returnConstant(emptyAny)});
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(viewReplyClass, "getCmUnderPlayer"), emptyAny);
             return count + 1;
         } catch (Throwable th) {
             return count;
@@ -387,7 +408,7 @@ public final class BiliHook extends XposedModule {
             return false;
         }
         try {
-            return Boolean.TRUE.equals(hasCm.invoke(item, new Object[0]));
+            return Boolean.TRUE.equals(hasCm.invoke(item, NO_ARGS));
         } catch (Throwable th) {
             return false;
         }
@@ -420,7 +441,7 @@ public final class BiliHook extends XposedModule {
                 Class<?> callbackClass = Reflect.findClass(LEGACY_AD_SEGMENT_CALLBACK, classLoader);
                 Reflect.findAndHookMethod(callbackClass, "c", new Object[]{modelClass, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.7
                     protected void beforeHookedMethod(HookRuntime.HookParam param) {
-                        BiliHook.clearLegacyVideoAds(param.args[0]);
+                        BiliHook.clearLegacyVideoAds(param.getArg(0));
                     }
                 }});
                 count++;
@@ -448,7 +469,7 @@ public final class BiliHook extends XposedModule {
         }
 
         protected void beforeHookedMethod(HookRuntime.HookParam param) {
-            Object source = param.args[0];
+            Object source = param.getArg(0);
             if (!(source instanceof List)) {
                 return;
             }
@@ -460,7 +481,7 @@ public final class BiliHook extends XposedModule {
                 }
             });
             if (filtered != null) {
-                param.args[0] = filtered;
+                param.setArg(0, filtered);
             }
         }
     }
@@ -486,9 +507,9 @@ public final class BiliHook extends XposedModule {
             Class<?> cmClass = Reflect.findClass(VIEW_CM, classLoader);
             Class<?> anyClass = Reflect.findClass(PROTOBUF_ANY, classLoader);
             Object emptyAny = Reflect.callStaticMethod(anyClass, "getDefaultInstance", new Object[0]);
-            Reflect.findAndHookMethod(cmClass, "hasCmUnderPlayer", new Object[]{HookRuntime.returnConstant(false)});
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(cmClass, "hasCmUnderPlayer"), false);
             count = 0 + 1;
-            Reflect.findAndHookMethod(cmClass, "getCmUnderPlayer", new Object[]{HookRuntime.returnConstant(emptyAny)});
+            HookRuntime.hookReturnConstant(Reflect.findMethodExact(cmClass, "getCmUnderPlayer"), emptyAny);
             return count + 1;
         } catch (Throwable th) {
             return count;
@@ -568,22 +589,28 @@ public final class BiliHook extends XposedModule {
 
     private static int hookHomeFeedAds(ClassLoader classLoader) {
         int count = 0;
+        final Class<?> adItemClass = Reflect.findClassIfExists(PEGASUS_AD_ITEM, classLoader);
+        final ItemPredicate outputAdPredicate = adItemClass == null
+                ? null
+                : item -> item != null && item.getClass() == adItemClass;
         try {
             Class<?> parserClass = Reflect.findClass(PEGASUS_BASE_PARSER, classLoader);
             final Class<?> jsonArrayClass = Reflect.findClass("com.alibaba.fastjson.JSONArray", classLoader);
+            final Class<?> jsonObjectClass = Reflect.findClass("com.alibaba.fastjson.JSONObject", classLoader);
+            final Constructor<?> jsonArrayConstructor = jsonArrayClass.getDeclaredConstructor();
+            jsonArrayConstructor.setAccessible(true);
+            final ItemPredicate rawJsonAdPredicate = item ->
+                    BiliHook.isPegasusRawJsonAd(item, jsonObjectClass);
             for (Method method : parserClass.getDeclaredMethods()) {
                 Class<?>[] parameters = method.getParameterTypes();
                 if (parameters.length == 1 && parameters[0] == jsonArrayClass && List.class.isAssignableFrom(method.getReturnType())) {
                     HookRuntime.hook(method, new HookRuntime.Callback() { // from class: io.github.yylsping.bilihook.BiliHook.11
                         protected void beforeHookedMethod(HookRuntime.HookParam param) {
-                            Object filtered = BiliHook.filterPegasusJsonInput(param.args[0], jsonArrayClass);
+                            Object filtered = BiliHook.filterPegasusJsonInput(
+                                    param.getArg(0), jsonArrayConstructor, rawJsonAdPredicate);
                             if (filtered != null) {
-                                param.args[0] = filtered;
+                                param.setArg(0, filtered);
                             }
-                        }
-
-                        protected void afterHookedMethod(HookRuntime.HookParam param) {
-                            BiliHook.filterPegasusResult(param);
                         }
                     });
                     count = 0 + 1;
@@ -594,50 +621,44 @@ public final class BiliHook extends XposedModule {
         }
         try {
             Class<?> converterClass = Reflect.findClass(PEGASUS_BRPC_CONVERTER, classLoader);
-            Reflect.findAndHookMethod(converterClass, "a", new Object[]{List.class, new AnonymousClass12()});
+            Class<?> cardOrBuilderClass = Reflect.findClass(PEGASUS_CARD_OR_BUILDER, classLoader);
+            final Method getItemCase = Reflect.findMethodExact(cardOrBuilderClass, "getItemCase");
+            final ItemPredicate rawBrpcAdPredicate = item ->
+                    BiliHook.isPegasusRawBrpcAd(item, getItemCase);
+            Reflect.findAndHookMethod(converterClass, "a", List.class,
+                    new HookRuntime.Callback() {
+                        @Override
+                        protected void beforeHookedMethod(HookRuntime.HookParam param) {
+                            Object source = param.getArg(0);
+                            if (!(source instanceof List)) return;
+                            List<Object> filtered = BiliHook.filterList(
+                                    (List<?>) source, rawBrpcAdPredicate);
+                            if (filtered != null) param.setArg(0, filtered);
+                        }
+
+                        @Override
+                        protected void afterHookedMethod(HookRuntime.HookParam param) {
+                            BiliHook.filterPegasusResult(param, outputAdPredicate);
+                        }
+                    });
             return count + 1;
         } catch (Throwable th2) {
             return count;
         }
     }
 
-    /* JADX INFO: renamed from: io.github.yylsping.bilihook.BiliHook$12, reason: invalid class name */
-    static class AnonymousClass12 extends HookRuntime.Callback {
-        AnonymousClass12() {
-        }
-
-        protected void beforeHookedMethod(HookRuntime.HookParam param) {
-            List<Object> filtered;
-            Object source = param.args[0];
-            if ((source instanceof List) && (filtered = BiliHook.filterList((List) source, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$12$$ExternalSyntheticLambda0
-                @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
-                public final boolean test(Object obj) {
-                    return BiliHook.isPegasusRawBrpcAd(obj);
-                }
-            })) != null) {
-                param.args[0] = filtered;
-            }
-        }
-
-        protected void afterHookedMethod(HookRuntime.HookParam param) {
-            BiliHook.filterPegasusResult(param);
-        }
-    }
-
     /* JADX INFO: Access modifiers changed from: private */
-    public static Object filterPegasusJsonInput(Object source, Class<?> jsonArrayClass) {
+    @SuppressWarnings("unchecked")
+    public static Object filterPegasusJsonInput(
+            Object source, Constructor<?> jsonArrayConstructor, ItemPredicate predicate) {
         List<Object> filtered;
-        if (!(source instanceof List) || (filtered = filterList((List) source, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$$ExternalSyntheticLambda0
-            @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
-            public final boolean test(Object obj) {
-                return BiliHook.isPegasusRawJsonAd(obj);
-            }
-        })) == null) {
+        if (!(source instanceof List)
+                || (filtered = filterList((List<?>) source, predicate)) == null) {
             return null;
         }
         try {
-            Object replacement = Reflect.newInstance(jsonArrayClass, new Object[0]);
-            Reflect.callMethod(replacement, "addAll", new Object[]{filtered});
+            Object replacement = jsonArrayConstructor.newInstance();
+            ((List<Object>) replacement).addAll(filtered);
             return replacement;
         } catch (Throwable th) {
             return null;
@@ -645,44 +666,45 @@ public final class BiliHook extends XposedModule {
     }
 
     /* JADX INFO: Access modifiers changed from: private */
-    public static boolean isPegasusRawJsonAd(Object item) {
-        if (item == null) {
+    public static boolean isPegasusRawJsonAd(Object item, Class<?> jsonObjectClass) {
+        if (!jsonObjectClass.isInstance(item) || !(item instanceof Map)) {
             return false;
         }
-        try {
-            Object isAd = Reflect.callMethod(item, "getBooleanValue", new Object[]{"is_ad"});
-            if (Boolean.TRUE.equals(isAd)) {
-                return true;
-            }
-        } catch (Throwable th) {
-        }
-        try {
-            if (Reflect.callMethod(item, "getJSONObject", new Object[]{"ad_info"}) != null) {
-                return true;
-            }
-        } catch (Throwable th2) {
-        }
-        try {
-            Object cardType = Reflect.callMethod(item, "getString", new Object[]{"card_type"});
-            if (cardType instanceof String) {
-                String normalized = ((String) cardType).toLowerCase();
-                if (!normalized.startsWith("ad_") && !normalized.contains("_ad_") && !"ad".equals(normalized)) {
-                    return false;
-                }
-                return true;
-            }
-        } catch (Throwable th3) {
+        Map<?, ?> values = (Map<?, ?>) item;
+        if (isFastJsonTrue(values.get("is_ad"))) return true;
+
+        Object adInfo = values.get("ad_info");
+        if (adInfo instanceof Map) return true;
+
+        Object cardType = values.get("card_type");
+        return cardType != null && isPegasusAdCardType(cardType.toString());
+    }
+
+    private static boolean isFastJsonTrue(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() == 1;
+        if (!(value instanceof String)) return false;
+        String text = (String) value;
+        return "1".equals(text) || "true".equalsIgnoreCase(text);
+    }
+
+    private static boolean isPegasusAdCardType(String cardType) {
+        int length = cardType.length();
+        if (length == 2) return cardType.equalsIgnoreCase("ad");
+        if (length >= 3 && cardType.regionMatches(true, 0, "ad_", 0, 3)) return true;
+        for (int index = 0; index <= length - 4; index++) {
+            if (cardType.regionMatches(true, index, "_ad_", 0, 4)) return true;
         }
         return false;
     }
 
     /* JADX INFO: Access modifiers changed from: private */
-    public static boolean isPegasusRawBrpcAd(Object item) {
+    public static boolean isPegasusRawBrpcAd(Object item, Method getItemCase) {
         if (item == null) {
             return false;
         }
         try {
-            Object itemCase = Reflect.callMethod(item, "getItemCase", new Object[0]);
+            Object itemCase = getItemCase.invoke(item, NO_ARGS);
             if (itemCase instanceof Enum) {
                 String name = ((Enum) itemCase).name();
                 return name.startsWith("AD_") || name.endsWith("_AD") || name.contains("_AD_");
@@ -693,21 +715,16 @@ public final class BiliHook extends XposedModule {
     }
 
     /* JADX INFO: Access modifiers changed from: private */
-    public static void filterPegasusResult(HookRuntime.HookParam param) {
+    public static void filterPegasusResult(
+            HookRuntime.HookParam param, ItemPredicate outputAdPredicate) {
+        if (outputAdPredicate == null) return;
         List<Object> filtered;
         Object result = param.getResult();
-        if ((result instanceof List) && (filtered = filterList((List) result, new ItemPredicate() { // from class: io.github.yylsping.bilihook.BiliHook$$ExternalSyntheticLambda1
-            @Override // io.github.yylsping.bilihook.BiliHook.ItemPredicate
-            public final boolean test(Object obj) {
-                return BiliHook.lambda$filterPegasusResult$0(obj);
-            }
-        })) != null) {
-            param.setResult(filtered);
+        if (result instanceof List) {
+            List<?> source = (List<?>) result;
+            filtered = filterList(source, outputAdPredicate);
+            if (filtered != null) param.setResult(filtered);
         }
-    }
-
-    static /* synthetic */ boolean lambda$filterPegasusResult$0(Object item) {
-        return item != null && PEGASUS_AD_ITEM.equals(item.getClass().getName());
     }
 
     /**
@@ -729,7 +746,7 @@ public final class BiliHook extends XposedModule {
             Reflect.findAndHookMethod(serviceClass, "q2", Integer.TYPE, String.class, new HookRuntime.Callback() {
                 @Override
                 protected void beforeHookedMethod(HookRuntime.HookParam param) {
-                    rememberRequestedPremiumQuality(((Integer) param.args[0]).intValue());
+                    rememberRequestedPremiumQuality(((Integer) param.getArg(0)).intValue());
                 }
             });
             count++;
@@ -740,7 +757,7 @@ public final class BiliHook extends XposedModule {
             Reflect.findAndHookMethod(serviceClass, "j2", Integer.TYPE, String.class, new HookRuntime.Callback() {
                 @Override
                 protected void beforeHookedMethod(HookRuntime.HookParam param) {
-                    rememberRequestedPremiumQuality(((Integer) param.args[0]).intValue());
+                    rememberRequestedPremiumQuality(((Integer) param.getArg(0)).intValue());
                 }
             });
             count++;
@@ -769,7 +786,7 @@ public final class BiliHook extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(HookRuntime.HookParam param) {
                     try {
-                        Object playIndex = Reflect.callMethod(param.args[0], "b");
+                        Object playIndex = Reflect.callMethod(param.getArg(0), "b");
                         int quality = Reflect.getIntField(playIndex, "mQuality");
                         rememberRequestedPremiumQuality(quality);
                     } catch (Throwable ignored) {
@@ -810,9 +827,9 @@ public final class BiliHook extends XposedModule {
                             }
                             Class<?> type = method.getParameterTypes()[0];
                             if (type == Long.TYPE || type == Long.class) {
-                                param.args[0] = Long.valueOf(quality);
+                                param.setArg(0, Long.valueOf(quality));
                             } else if (type == Integer.TYPE || type == Integer.class) {
-                                param.args[0] = Integer.valueOf(quality);
+                                param.setArg(0, Integer.valueOf(quality));
                             }
                         }
                     });
@@ -824,7 +841,7 @@ public final class BiliHook extends XposedModule {
                         @Override
                         protected void beforeHookedMethod(HookRuntime.HookParam param) {
                             if (desiredPremiumQuality.get() >= 120 && isLoggedIn()) {
-                                param.args[0] = Boolean.TRUE;
+                                param.setArg(0, Boolean.TRUE);
                             }
                         }
                     });
@@ -923,7 +940,7 @@ public final class BiliHook extends XposedModule {
                         return;
                     }
                     try {
-                        Reflect.callMethod(param.args[1], "setRealQuality", new Object[]{Long.valueOf(quality)});
+                        Reflect.callMethod(param.getArg(1), "setRealQuality", new Object[]{Long.valueOf(quality)});
                     } catch (Throwable th) {
                     }
                 }
@@ -936,7 +953,7 @@ public final class BiliHook extends XposedModule {
                         protected void beforeHookedMethod(HookRuntime.HookParam param) {
                             int quality = BiliHook.desiredPremiumQuality.get();
                             if (quality >= BiliHook.PREMIUM_QUALITY_MIN && BiliHook.isLoggedIn()) {
-                                param.args[2] = Long.valueOf(quality);
+                                param.setArg(2, Long.valueOf(quality));
                             }
                         }
                     });
@@ -954,7 +971,9 @@ public final class BiliHook extends XposedModule {
             Class<?> searchResultClass = Reflect.findClass(SEARCH_RESULT_ALL, classLoader);
             Class<?> itemClass = Reflect.findClass(SEARCH_ITEM, classLoader);
             Method getCardItemCase = Reflect.findMethodExact(itemClass, "getCardItemCase", new Class[0]);
-            Reflect.findAndHookMethod(converterClass, "a", new Object[]{List.class, searchResultClass, Integer.TYPE, new AnonymousClass23(getCardItemCase)});
+            Reflect.findAndHookMethod(converterClass, "a",
+                    new Object[]{List.class, searchResultClass,
+                            new AnonymousClass23(getCardItemCase)});
             return true;
         } catch (Throwable th) {
             return false;
@@ -970,7 +989,7 @@ public final class BiliHook extends XposedModule {
         }
 
         protected void beforeHookedMethod(HookRuntime.HookParam param) {
-            Object sourceArg = param.args[0];
+            Object sourceArg = param.getArg(0);
             if (!(sourceArg instanceof List)) {
                 return;
             }
@@ -982,7 +1001,7 @@ public final class BiliHook extends XposedModule {
                 }
             });
             if (filtered != null) {
-                param.args[0] = filtered;
+                param.setArg(0, filtered);
             }
         }
     }
@@ -993,7 +1012,7 @@ public final class BiliHook extends XposedModule {
             return false;
         }
         try {
-            Object type = getCardItemCase.invoke(item, new Object[0]);
+            Object type = getCardItemCase.invoke(item, NO_ARGS);
             return (type instanceof Enum) && "CM".equals(((Enum) type).name());
         } catch (Throwable th) {
             return false;

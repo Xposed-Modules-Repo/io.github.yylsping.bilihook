@@ -40,18 +40,18 @@ final class HookRuntime {
                 .intercept(chain -> intercept(chain, callback));
     }
 
-    static Callback returnConstant(Object value) {
-        return new Callback() {
-            @Override
-            protected void beforeHookedMethod(HookParam param) {
-                param.setResult(value);
-            }
-        };
+    static XposedInterface.HookHandle hookReturnConstant(Executable executable, Object constant) {
+        XposedModule value = module;
+        if (value == null) throw new IllegalStateException("libxposed is not attached");
+        executable.setAccessible(true);
+        return value.hook(executable)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept(chain -> constant);
     }
 
     private static Object intercept(XposedInterface.Chain chain, Callback callback)
             throws Throwable {
-        HookParam param = new HookParam(chain.getThisObject(), chain.getArgs().toArray());
+        HookParam param = new HookParam(chain);
         try {
             callback.beforeHookedMethod(param);
         } catch (Throwable callbackError) {
@@ -61,7 +61,7 @@ final class HookRuntime {
 
         if (!param.returnEarly) {
             try {
-                param.result = chain.proceed(param.args);
+                param.result = param.proceed();
             } catch (Throwable originalError) {
                 param.throwable = originalError;
             }
@@ -82,15 +82,30 @@ final class HookRuntime {
     }
 
     static final class HookParam {
+        private final XposedInterface.Chain chain;
         final Object thisObject;
-        final Object[] args;
+        private Object[] modifiedArgs;
         private Object result;
         private Throwable throwable;
         private boolean returnEarly;
 
-        HookParam(Object thisObject, Object[] args) {
-            this.thisObject = thisObject;
-            this.args = args;
+        HookParam(XposedInterface.Chain chain) {
+            this.chain = chain;
+            this.thisObject = chain.getThisObject();
+        }
+
+        Object getArg(int index) {
+            Object[] args = modifiedArgs;
+            return args == null ? chain.getArg(index) : args[index];
+        }
+
+        void setArg(int index, Object value) {
+            Object[] args = modifiedArgs;
+            if (args == null) {
+                args = chain.getArgs().toArray();
+                modifiedArgs = args;
+            }
+            args[index] = value;
         }
 
         Object getResult() {
@@ -103,8 +118,15 @@ final class HookRuntime {
             returnEarly = true;
         }
 
+        private Object proceed() throws Throwable {
+            Object[] args = modifiedArgs;
+            return args == null ? chain.proceed() : chain.proceed(args);
+        }
+
         @Override
         public String toString() {
+            Object[] args = modifiedArgs;
+            if (args == null) args = chain.getArgs().toArray();
             return "HookParam{" + thisObject + ", args=" + Arrays.toString(args) + '}';
         }
     }

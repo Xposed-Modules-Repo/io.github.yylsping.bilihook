@@ -17,7 +17,7 @@
 | 目标应用 | 哔哩哔哩 Android 7.4.0（7040300） |
 | Android | 8.0（API 26）及以上 |
 | 框架 | 支持 libxposed Modern API 102 的 LSPosed |
-| 模块版本 | 1.5.1（versionCode 11） |
+| 模块版本 | 1.6.0（versionCode 12） |
 
 该模块依赖目标应用的内部类与方法签名，不保证兼容其他哔哩哔哩版本。
 

@@ -22,6 +22,7 @@ keystore.properties
 *.key
 
 # Local release artifacts
+.debug/
 *.apk
 *.aab
 *-source.zip
