@@ -29,6 +29,7 @@ keystore.properties
 dist/
 
 # Internal validation notes
+/bili-hook-polish.md
 /VALIDATION*.md
 /XPOSED_UPDATE.md
 
