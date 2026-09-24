@@ -46,8 +46,6 @@ public final class BiliHook extends XposedModule {
     private static final String SEARCH_RESULT_ALL = "com.bilibili.search.api.SearchResultAll";
     private static final String TAG = "bili hook";
     private static final String TARGET_PACKAGE = "tv.danmaku.bili";
-    private static final String TARGET_VERSION_NAME = "7.4.0";
-    private static final long TARGET_VERSION_CODE = 7040300L;
     private static final String UGC_RESOLVER = "tv.danmaku.video.resolver.c";
     private static final String VIEW_CM = "com.bapis.bilibili.app.viewunite.v1.CM";
     private static final String VIP_EXTRA = "com.bilibili.lib.accountinfo.model.VipExtraUserInfo";
@@ -95,11 +93,13 @@ public final class BiliHook extends XposedModule {
                 @Override
                 protected void afterHookedMethod(HookRuntime.HookParam hookParam) {
                     Context context = (Context) hookParam.getArg(0);
-                    if (context == null || !isSupportedTarget(context)
-                            || !INSTALLED.compareAndSet(false, true)) {
+                    HostVersion version = context == null
+                            ? HostVersion.UNSUPPORTED : resolveHostVersion(context);
+                    if (!version.isSupported() || !INSTALLED.compareAndSet(false, true)) {
                         return;
                     }
-                    installHooks((Application) hookParam.thisObject, context.getClassLoader());
+                    installHooks((Application) hookParam.thisObject,
+                            context.getClassLoader(), version);
                 }
             });
         } catch (Throwable error) {
@@ -107,26 +107,35 @@ public final class BiliHook extends XposedModule {
         }
     }
 
-    private static boolean isSupportedTarget(Context context) {
+    private static HostVersion resolveHostVersion(Context context) {
         try {
             PackageInfo info = context.getPackageManager().getPackageInfo(TARGET_PACKAGE, 0);
             long versionCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
                     ? info.getLongVersionCode()
                     : info.versionCode;
-            if (TARGET_VERSION_CODE == versionCode
-                    && TARGET_VERSION_NAME.equals(info.versionName)) {
-                return true;
+            HostVersion version = HostVersion.resolve(versionCode, info.versionName);
+            if (version.isSupported()) {
+                return version;
             }
             HookRuntime.log("unsupported Bilibili " + info.versionName + " (" + versionCode
                     + "); hooks not installed");
         } catch (Throwable error) {
             HookRuntime.log("failed to verify Bilibili version", error);
         }
-        return false;
+        return HostVersion.UNSUPPORTED;
+    }
+
+    private static void installHooks(
+            Context context, ClassLoader classLoader, HostVersion version) {
+        if (version == HostVersion.BILI_7_42_0) {
+            Bili742Hooks.install(context, classLoader);
+            return;
+        }
+        installHooks740(context, classLoader);
     }
 
     /* JADX INFO: Access modifiers changed from: private */
-    public static void installHooks(Context context, ClassLoader classLoader) {
+    private static void installHooks740(Context context, ClassLoader classLoader) {
         List<String> unavailable = new ArrayList<>();
         int hookCount = 0;
         try {

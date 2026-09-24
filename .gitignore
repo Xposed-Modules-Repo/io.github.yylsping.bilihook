@@ -21,6 +21,9 @@ keystore.properties
 *.pem
 *.key
 
+# README is public
+!/README.md
+
 # Local release artifacts
 .debug/
 *.apk
@@ -29,8 +32,7 @@ keystore.properties
 dist/
 
 # Internal validation notes
-/bili-hook-polish.md
-/VALIDATION*.md
+/*.md
 /XPOSED_UPDATE.md
 
 # OS files

@@ -16,8 +16,8 @@ android {
         applicationId "io.github.yylsping.bilihook"
         minSdk 26
         targetSdk 36
-        versionCode 12
-        versionName "1.6.0"
+        versionCode 13
+        versionName "1.7.0"
     }
 
     signingConfigs {
@@ -46,13 +46,17 @@ android {
         targetCompatibility JavaVersion.VERSION_11
     }
 
+    buildFeatures {
+        buildConfig true
+    }
+
     testOptions {
         unitTests.returnDefaultValues = true
     }
 
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            outputFileName = "bili hook_1.6.0.apk"
+            outputFileName = "bili hook_1.7.0.apk"
         }
     }
 
