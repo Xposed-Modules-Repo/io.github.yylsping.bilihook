@@ -30,6 +30,7 @@ keystore.properties
 *.aab
 *-source.zip
 dist/
+docs/
 
 # Internal validation notes
 /*.md

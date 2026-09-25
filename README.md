@@ -19,7 +19,7 @@
 | 框架 | 支持 libxposed Modern API 102 的 LSPosed |
 | 模块版本 | 1.7.0（versionCode 13） |
 
-该模块依赖目标应用的内部类与方法签名，只会对上表两个精确版本安装业务 Hook，不支持其他 7.x 版本。7.42.0 的符号与验证记录见 [`docs/7420400-research.md`](docs/7420400-research.md)。
+该模块依赖目标应用的内部类与方法签名，只会对上表两个精确版本安装业务 Hook，不支持其他 7.x 版本。
 
 ## 安装
 
@@ -41,9 +41,9 @@
 
 ## 相关项目
 
-- [BiliPartFix](https://github.com/yylsping/bili-part-fix)：面向哔哩哔哩 7.4.0，负责旧客户端的分 P 播放、动态评论、图文评论、EVA3/Opus 专栏和小站图文等兼容性修复。
+- [BiliPartFix](https://github.com/yylsping/bili-part-fix)：面向哔哩哔哩 7.4.0 和 7.42.0，负责旧客户端的分 P 播放、动态评论、图文评论、EVA3/Opus 专栏和小站图文等兼容性修复。
 
-`bili hook` 与 `BiliPartFix` 可以分别安装：前者侧重画质解锁与去广告并精确支持 7.4.0、7.42.0，后者仍严格限定哔哩哔哩 7.4.0。
+`bili hook` 与 `BiliPartFix` 可以分别安装：前者侧重画质解锁与去广告，后者侧重旧版客户端兼容修复。两者均严格限定哔哩哔哩 7.4.0、7.42.0
 
 ## 许可证
 
