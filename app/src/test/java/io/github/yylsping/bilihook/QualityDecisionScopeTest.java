@@ -1,5 +1,6 @@
 package io.github.yylsping.bilihook;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -19,6 +20,32 @@ public final class QualityDecisionScopeTest {
     }
 
     @Test
+    public void falseEnterPushesInactiveFrame() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        assertFalse(scope.enter(true, 80));
+        assertFalse(scope.isActive());
+        assertEquals(1, scope.depth());
+
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
+    public void trueEnterPushesActiveFrame() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        assertTrue(scope.enter(true, 120));
+        assertTrue(scope.isActive());
+        assertEquals(1, scope.depth());
+
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
     public void scopeIsActiveOnlyBetweenEnterAndExit() {
         QualityDecisionScope scope = new QualityDecisionScope();
         assertFalse(scope.isActive());
@@ -35,7 +62,111 @@ public final class QualityDecisionScopeTest {
 
         assertFalse(scope.enter(true, 80));
         assertFalse(scope.isActive());
+        scope.exit();
         assertFalse(scope.enter(false, 120));
+        assertFalse(scope.isActive());
+        scope.exit();
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
+    public void nestedGrantedFramesStayActiveUntilOutermostExit() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        assertTrue(scope.enter(true, 120));
+        assertTrue(scope.enter(true, 116));
+        assertTrue(scope.isActive());
+        assertEquals(2, scope.depth());
+
+        scope.exit();
+        assertTrue("inner exit must not clear the outer frame", scope.isActive());
+        assertEquals(1, scope.depth());
+
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
+    public void innerRefusedFrameDoesNotInheritOuterGrant() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        assertTrue(scope.enter(true, 120));
+        assertFalse(scope.enter(true, 80));
+        assertFalse("innermost frame alone decides the state", scope.isActive());
+        assertEquals(2, scope.depth());
+
+        scope.exit();
+        assertTrue("popping the inner frame restores the outer grant", scope.isActive());
+
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
+    public void innerGrantedFrameInsideRefusedOuter() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        assertFalse(scope.enter(true, 80));
+        assertFalse(scope.isActive());
+        assertTrue(scope.enter(true, 120));
+        assertTrue(scope.isActive());
+
+        scope.exit();
+        assertFalse(scope.isActive());
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
+    public void threeLevelNestingRestoresFrameByFrame() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        assertTrue(scope.enter(true, 120));
+        assertFalse(scope.enter(true, 64));
+        assertTrue(scope.enter(true, 116));
+        assertTrue(scope.isActive());
+        assertEquals(3, scope.depth());
+
+        scope.exit();
+        assertFalse(scope.isActive());
+        scope.exit();
+        assertTrue(scope.isActive());
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+    }
+
+    @Test
+    public void outermostExitClearsThreadLocal() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        scope.enter(true, 120);
+        scope.exit();
+        assertEquals(0, scope.depth());
+        assertFalse(scope.isActive());
+
+        // A later unmatched exit must still find a clean thread state.
+        scope.exit();
+        assertEquals(0, scope.depth());
+        assertFalse(scope.isActive());
+    }
+
+    @Test
+    public void sequentialEnterExitLeavesNoResidue() {
+        QualityDecisionScope scope = new QualityDecisionScope();
+
+        for (int i = 0; i < 5; i++) {
+            assertTrue(scope.enter(true, 120));
+            assertTrue(scope.isActive());
+            scope.exit();
+            assertFalse(scope.enter(true, 80));
+            assertFalse(scope.isActive());
+            scope.exit();
+        }
+        assertEquals(0, scope.depth());
         assertFalse(scope.isActive());
     }
 
@@ -43,7 +174,16 @@ public final class QualityDecisionScopeTest {
     public void exitWithoutEnterIsSafe() {
         QualityDecisionScope scope = new QualityDecisionScope();
         scope.exit();
+        scope.exit();
         assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
+
+        // The scope keeps working normally after unmatched exits.
+        assertTrue(scope.enter(true, 120));
+        assertTrue(scope.isActive());
+        scope.exit();
+        assertFalse(scope.isActive());
+        assertEquals(0, scope.depth());
     }
 
     @Test
@@ -64,6 +204,30 @@ public final class QualityDecisionScopeTest {
         assertFalse(otherThreadActive[0]);
         assertTrue(scope.isActive());
         scope.exit();
+    }
+
+    @Test
+    public void nestedFramesOnOtherThreadDoNotPolluteThisThread() throws Exception {
+        final QualityDecisionScope scope = new QualityDecisionScope();
+        scope.enter(true, 120);
+
+        Thread other = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                // A refused frame nested inside a granted frame on another thread.
+                scope.enter(true, 120);
+                scope.enter(true, 80);
+                scope.exit();
+                scope.exit();
+            }
+        });
+        other.start();
+        other.join();
+
+        assertTrue(scope.isActive());
+        assertEquals(1, scope.depth());
+        scope.exit();
+        assertEquals(0, scope.depth());
     }
 
     @Test

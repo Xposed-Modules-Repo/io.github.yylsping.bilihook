@@ -73,7 +73,8 @@ final class Bili742Hooks {
         if (BuildConfig.DEBUG) {
             hookCount += Bili742DebugProbe.install(classLoader);
         }
-        String summary = "bili hook 7.42.0: initialized (" + hookCount + " hooks)";
+        String summary = "bili hook 7.42.0: initialized (" + hookCount + " hooks, "
+                + (BuildConfig.DEBUG ? "debug" : "release") + ")";
         if (!unavailable.isEmpty()) summary += ", unavailable=" + String.join(",", unavailable);
         HookRuntime.log(summary);
     }
@@ -159,8 +160,10 @@ final class Bili742Hooks {
         else unavailable.add(spec.id + "-quality-completion");
         if (hookDecisionScope(spec, serviceClass)) count++;
         else unavailable.add(spec.id + "-decision-scope");
-        if (hookResourceObserver(spec, serviceClass, classLoader)) count++;
-        else unavailable.add(spec.id + "-resource-observer");
+        if (BuildConfig.DEBUG) {
+            if (hookResourceObserver(spec, serviceClass, classLoader)) count++;
+            else unavailable.add(spec.id + "-resource-observer");
+        }
         return count;
     }
 
@@ -326,6 +329,7 @@ final class Bili742Hooks {
         }
     }
 
+    /** Debug-only observer; never installed in release builds. */
     private static boolean hookResourceObserver(final QualityServiceSpec spec,
             Class<?> serviceClass, ClassLoader classLoader) {
         try {
@@ -336,7 +340,6 @@ final class Bili742Hooks {
                     new HookRuntime.Callback() {
                         @Override
                         protected void afterHookedMethod(HookRuntime.HookParam param) {
-                            if (!BuildConfig.DEBUG) return;
                             String content = currentContentKey(param.thisObject, spec.pgc);
                             PremiumQualityState.Snapshot transaction = QUALITY.current(
                                     param.thisObject, content, SystemClock.elapsedRealtime());

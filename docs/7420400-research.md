@@ -20,7 +20,7 @@ screenshot, dump, account credential, or diagnostic script is shipped in the mod
 | Meaning | Exact 7.42.0 symbol/signature | Final use |
 | --- | --- | --- |
 | Login state | `BiliAccounts.get(Context)` + `isLogin()` | Checked before creating or authorizing a transaction |
-| Scoped current-account VIP | `BiliAccountInfo.isEffectiveVip()` | Returns true only while an authorized quality gate is on the current thread |
+| Scoped current-account VIP | `BiliAccountInfo.isEffectiveVip()` | Temporarily overridden only inside two explicit quality scopes (transaction gate and startup/auto decision); everywhere else the host's original VIP result is returned |
 | UGC selection/gate/request | `PlayerQualityService.t5(int, String)` / `N0(int, String)` / `e3()` | Owner/content-bound transaction and native request correlation |
 | PGC selection/gate/request | `l.t5(int, String)` / `S1(int, String)` / `B1()` | Owner/content-bound transaction and native request correlation |
 | Completion | each service's `a(boolean, int, int, boolean)` | Observed only; the callback, Toast, and UI are never rewritten |
@@ -66,9 +66,15 @@ audio, projection, Story, and other membership-related presentation paths. They 
 be treated as safe process-wide current-account-only receivers.
 
 The final implementation hooks neither model. The only VIP override is the current-account
-`BiliAccountInfo` query nested inside the exact UGC/PGC quality gate, protected by the transaction
-marker above. Outside that synchronous gate, including comment list rendering and user profiles,
-the original VIP result is untouched.
+`BiliAccountInfo.isEffectiveVip()` query, and it is temporarily overridden inside exactly two
+explicit quality contexts:
+
+1. the owner/content-bound user-initiated premium switch transaction (the `N0`/`S1` quality gate
+   on the current thread, protected by the transaction marker above);
+2. the host's synchronously executed `i6`/`Z6` startup/auto quality decision scope.
+
+Outside these two scopes — including comment list rendering and user profiles — the query always
+returns the host's original VIP result.
 
 ## Runtime quality evidence
 
@@ -158,10 +164,16 @@ membership clamp inside the host's own startup decision.
 - Root cause of the P1: the ceiling (e.g. 120) was persisted and re-read correctly, but the VIP
   check inside `i6`/`Z6` dropped every premium entry, so a fresh video fell back to plain 80.
   Confirmed live: `i6 enter {h=120} available=[120:vip, 116:vip, 80, ...]` -> `i6 => 80`.
-- Fix: `QualityDecisionScope`, a second `ThreadLocal` that wraps only the `i6`/`Z6` call, and only
-  when the host-read ceiling is premium (>= 112) and the account is logged in. Within that call the
-  existing scoped `BiliAccountInfo.isEffectiveVip()` override applies; the host's native strategy
-  still performs all ranking and fallback. No qn is stored, rewritten, or reused across contents.
+- Fix: `QualityDecisionScope`, a thread-scoped frame stack that wraps only the `i6`/`Z6` call, and
+  only when the host-read ceiling is premium (>= 112) and the account is logged in. Within that
+  call the existing scoped `BiliAccountInfo.isEffectiveVip()` override applies; the host's native
+  strategy still performs all ranking and fallback. No qn is stored, rewritten, or reused across
+  contents.
+- Nesting: every `enter(...)` pushes an independent frame (a refused entry pushes an inactive
+  frame), the innermost frame alone decides the current state, an inactive inner frame never
+  inherits an active outer frame, `exit()` pops only the current frame so the outer frame is
+  restored, and the `ThreadLocal` itself is removed once the outermost frame exits. An unmatched
+  `exit()` is ignored safely (one debug diagnostic, no crash, no residue).
 
 Device evidence on a logged-in non-VIP account (module active, single-part videos):
 
